@@ -388,6 +388,19 @@
   .ko-owner{font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink);background:var(--gold);border-radius:5px;padding:2px 5px}
   .ko-sub{font-size:9px;color:var(--muted2);font-family:'JetBrains Mono'}
   .ko-v{text-align:center;font-size:9px;color:var(--muted2);margin:3px 0;text-transform:uppercase;letter-spacing:.1em}
+  .ko-team.won{background:rgba(43,212,131,.14);border:1px solid rgba(43,212,131,.4)}
+  .ko-team.won .ko-name{color:#8af0bf}
+  .ko-team.lost{opacity:.5}
+  .ko-team.lost .ko-name{text-decoration:line-through;text-decoration-color:rgba(255,90,60,.6)}
+  .ko-score{font-family:'JetBrains Mono';font-weight:900;font-size:13px;color:var(--cream);min-width:14px;text-align:right}
+  .ko-team.lost .ko-score{color:var(--muted2)}
+  .ko-pens{font-size:9px;color:var(--gold);font-family:'JetBrains Mono';margin-top:5px;text-align:center;letter-spacing:.03em}
+  .ko-tie.done{border-color:rgba(43,212,131,.22)}
+  .bracket-slot.filled{border-style:solid;border-color:rgba(216,180,106,.3);background:rgba(216,180,106,.08)}
+  .bracket-slot .r16-team{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--cream);font-weight:700;line-height:1.3}
+  .bracket-slot .r16-team.tbd{color:var(--muted);font-weight:600}
+  .bracket-slot .r16-team .flag{font-size:13px}
+  .bracket-slot .ko-mini-vs{font-size:8px;color:var(--muted2);text-transform:uppercase;letter-spacing:.1em;margin:2px 0;display:block}
   .ko-band{background:linear-gradient(180deg,var(--ink2),var(--ink));border:1px solid var(--line);border-radius:18px;padding:18px 18px 8px;margin:18px 0 4px}
   .ko-band-head h2{font-family:'Anton';font-size:22px;text-transform:uppercase;color:var(--cream);font-weight:400;letter-spacing:.02em}
   .ko-band-head h2 span{color:var(--gold)}
@@ -997,15 +1010,76 @@ function slotRow(slot){
   if(inf.team){const o=ownerOf(inf.team);return `<div class="ko-team in"><span class="flag">${flagOf(inf.team)}</span><span class="ko-name">${esc(inf.team)}</span>${o?`<span class="ko-owner">${esc(o)}</span>`:""}</div>`;}
   return `<div class="ko-team tbd"><span class="ko-name">${esc(inf.label)}</span>${inf.sub?`<span class="ko-sub">${esc(inf.sub)}</span>`:""}</div>`;
 }
-function r32TieCard(t){return `<div class="ko-tie"><div class="ko-no">R32 &middot; M${t.n}</div>${slotRow(t.a)}<div class="ko-v">v</div>${slotRow(t.b)}</div>`;}
+/* ---------- knockout results (Round of 32 onward) ---------- */
+const KO_RESULTS = {
+  73:{aScore:0,bScore:1,winner:"Canada"},
+  74:{aScore:1,bScore:1,pens:"4-3",winner:"Paraguay"},
+  75:{aScore:1,bScore:1,pens:"3-2",winner:"Morocco"},
+  76:{aScore:2,bScore:1,winner:"Brazil"}
+};
+// How Round-of-32 winners feed the Round of 16 (a/b are R32 match numbers).
+const R16_TIES = [
+  {n:89,a:73,b:75},{n:90,a:74,b:77},{n:91,a:76,b:78},{n:92,a:79,b:80},
+  {n:93,a:83,b:84},{n:94,a:81,b:82},{n:95,a:86,b:88},{n:96,a:85,b:87}
+];
+function r32TieOf(n){return R32_TIES.find(t=>t.n===n);}
+function r32Teams(n){const t=r32TieOf(n);if(!t)return {a:null,b:null};return {a:slotInfo(t.a).team,b:slotInfo(t.b).team};}
+function koWinner(n){const r=KO_RESULTS[n];return (r&&r.winner)?r.winner:null;}
+function koMatchTeams(n){
+  if(n>=73&&n<=88)return r32Teams(n);
+  const t=R16_TIES.find(x=>x.n===n);
+  if(t)return {a:koWinner(t.a),b:koWinner(t.b)};
+  return {a:null,b:null};
+}
+function koStageReached(n){
+  if(n>=73&&n<=88)return 2;  // win an R32 tie => reached the Round of 16
+  if(n>=89&&n<=96)return 3;  // reached the Quarter-finals
+  if(n>=97&&n<=100)return 4; // reached the Semi-finals
+  if(n>=101&&n<=102)return 5;// reached the Final
+  if(n===104)return 6;       // World Cup winners
+  return 0;
+}
+const KO_OUT_LABEL={1:"Lost in Round of 32",2:"Lost in Round of 16",3:"Lost in Quarter-final",4:"Lost in Semi-final",5:"Lost in Final"};
+// Award knockout stage bonuses to winners and knock out the losers, driven by KO_RESULTS.
+function syncKnockoutResults(){
+  if(!state||!state.scores)return;
+  Object.keys(KO_RESULTS).forEach(k=>{
+    const n=Number(k),r=KO_RESULTS[n];
+    if(!r||!r.winner)return;
+    const tm=koMatchTeams(n),w=r.winner,loser=tm.a===w?tm.b:tm.a,reached=koStageReached(n);
+    if(state.scores[w]){if((state.scores[w].stage||0)<reached)state.scores[w].stage=reached;state.scores[w].out=false;}
+    if(loser&&state.scores[loser])state.scores[loser].out=true;
+  });
+}
+function r32TieCard(t){
+  const ia=slotInfo(t.a),ib=slotInfo(t.b),r=KO_RESULTS[t.n],w=r&&r.winner;
+  const row=(inf,score)=>{
+    if(inf.team){
+      const o=ownerOf(inf.team),cls=w?(inf.team===w?"won":"lost"):"in";
+      return `<div class="ko-team ${cls}"><span class="flag">${flagOf(inf.team)}</span><span class="ko-name">${esc(inf.team)}</span>${o?`<span class="ko-owner">${esc(o)}</span>`:""}${score!==undefined?`<span class="ko-score">${esc(score)}</span>`:""}</div>`;
+    }
+    return `<div class="ko-team tbd"><span class="ko-name">${esc(inf.label)}</span>${inf.sub?`<span class="ko-sub">${esc(inf.sub)}</span>`:""}</div>`;
+  };
+  const pens=r&&r.pens?`<div class="ko-pens">${esc(r.winner)} ${esc(r.pens)} on penalties</div>`:"";
+  return `<div class="ko-tie${r?' done':''}"><div class="ko-no">R32 &middot; M${t.n}</div>${row(ia,r?r.aScore:undefined)}<div class="ko-v">${r?'&middot;':'v'}</div>${row(ib,r?r.bScore:undefined)}${pens}</div>`;
+}
+function r16SlotLine(feeder){
+  const team=koWinner(feeder);
+  if(team){const o=ownerOf(team);return `<span class="r16-team"><span class="flag">${flagOf(team)}</span>${esc(team)}${o?` <span class="ko-owner">${esc(o)}</span>`:""}</span>`;}
+  return `<span class="r16-team tbd">Winner M${feeder}</span>`;
+}
+function r16TieSlot(t){
+  return `<div class="bracket-slot${(koWinner(t.a)||koWinner(t.b))?' filled':''}">${r16SlotLine(t.a)}<span class="ko-mini-vs">v</span>${r16SlotLine(t.b)}</div>`;
+}
 function knockoutBracketPanel(){
   const cards=R32_TIES.map(r32TieCard).join("");
-  const conf=confirmedQualifiers().size;
+  const done=Object.keys(KO_RESULTS).length;
+  const r16=R16_TIES.map(r16TieSlot).join("");
   return `<div class="bracket-shell">
-    <div class="bracket-note"><strong style="color:var(--cream)">Round of 32 &mdash; ${conf}/32 qualifiers locked in.</strong> Teams drop into their slots automatically as each group is completed in the Matches tab. Third-place slots and the full draw lock when the group stage ends on 27 Jun.</div>
+    <div class="bracket-note"><strong style="color:var(--cream)">Round of 32 &mdash; ${done}/16 ties decided.</strong> Winners advance to the Round of 16 (+8 cumulative) and turn <span style="color:#8af0bf">green</span>; knocked-out teams are struck through. The bracket, leaderboard and graveyard all update automatically as results land.</div>
     <div class="ko-grid">${cards}</div>
     <div class="bracket-lanes" style="margin-top:18px">
-      <div class="bracket-col"><h3>Round of 16</h3>${Array.from({length:8},(_,i)=>`<div class="bracket-slot">R16 ${i+1}<br>Winner v Winner</div>`).join("")}</div>
+      <div class="bracket-col"><h3>Round of 16</h3>${r16}</div>
       <div class="bracket-col"><h3>Quarter-finals</h3>${Array.from({length:4},(_,i)=>`<div class="bracket-slot">QF ${i+1}<br>TBC</div>`).join("")}</div>
       <div class="bracket-col"><h3>Semi-finals</h3>${Array.from({length:2},(_,i)=>`<div class="bracket-slot">Semi ${i+1}<br>TBC</div>`).join("")}</div>
       <div class="bracket-col"><h3>Final</h3><div class="bracket-slot">World Cup Final<br>19 Jul &middot; MetLife</div><div class="bracket-slot">Third-place<br>18 Jul &middot; Miami</div></div>
@@ -1015,9 +1089,9 @@ function bracketPanel(){return knockoutBracketPanel();}
 // compact landing strip: the 16 R32 ties scrolling horizontally
 function knockoutStripLanding(){
   if(!state||!state.drawn)return "";
-  const conf=confirmedQualifiers().size;
+  const done=Object.keys(KO_RESULTS).length;
   const cards=R32_TIES.map(r32TieCard).join("");
-  return `<section class="ko-band"><div class="ko-band-head"><h2>Road to the Final <span>&middot; Round of 32</span></h2><div class="ko-band-sub">${conf}/32 teams locked &middot; full draw confirmed 27 Jun &middot; owner badges show whose nations are through</div></div><div class="ko-strip">${cards}</div></section>`;
+  return `<section class="ko-band"><div class="ko-band-head"><h2>Road to the Final <span>&middot; Round of 32</span></h2><div class="ko-band-sub">Knockouts underway &middot; ${done}/16 ties decided &middot; winners in green, knocked-out teams struck through</div></div><div class="ko-strip">${cards}</div></section>`;
 }
 function groupsPanel(){const standings=groupStandings();const cards=groupOrder().map(g=>groupCard(g,standings[g]||[])).join("");return `<div class="groups-wrap"><div class="sectionhead"><h2>Groups</h2><p>Real 2026 group-stage groups. Scores from the Matches tab flow into these tables when a match is set to <strong style="color:var(--cream)">Live</strong> or <strong style="color:var(--cream)">Final</strong>. Live scores are provisional until you mark full-time.</p></div><div class="groupgrid">${cards}</div>${thirdPlaceTable(standings)}<div class="sectionhead"><h2>Knockout Bracket</h2><p>Keep this as the knockout home. Once the group stage is complete, you can replace the placeholder slots with the confirmed Round of 32 draw.</p></div>${bracketPanel()}</div>`;}
 
@@ -1496,8 +1570,10 @@ function playerGoalAgg(){const gm=teamGoalMap();return PLAYERS.map(p=>{let gf=0,
 function eliminatedTeams(){
   const out=new Map();
   if(!state||!state.drawn)return out;
-  if(state.scores)Object.keys(state.scores).forEach(t=>{if(state.scores[t]&&state.scores[t].out)out.set(t,"Knocked out");});
   const qual=confirmedQualifiers();
+  if(state.scores)Object.keys(state.scores).forEach(t=>{
+    if(state.scores[t]&&state.scores[t].out)out.set(t,qual.has(t)?(KO_OUT_LABEL[state.scores[t].stage||1]||"Knocked out"):"Knocked out");
+  });
   const st=groupStandings();
   groupOrder().forEach(g=>{
     if(!groupComplete(g))return;
@@ -1694,6 +1770,7 @@ document.getElementById("tabs").addEventListener("click",e=>{
   syncGroupEliminations();
   // Guarantee: any qualifier that an old state left marked out gets corrected
   confirmedQualifiers().forEach(t=>{if(state.scores[t])state.scores[t].out=false;});
+  syncKnockoutResults();
   await save();
   render();
 })();
