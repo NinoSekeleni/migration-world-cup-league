@@ -417,6 +417,8 @@
   .hdot{width:8px;height:8px;border-radius:50%;background:#4ec07a;box-shadow:0 0 0 0 rgba(78,192,122,.7);animation:hpulse 1.8s infinite}
   @keyframes hpulse{0%{box-shadow:0 0 0 0 rgba(78,192,122,.6)}70%{box-shadow:0 0 0 7px rgba(78,192,122,0)}100%{box-shadow:0 0 0 0 rgba(78,192,122,0)}}
   .awards-page{margin-top:14px}
+  .awards-sec-title{font-family:'Anton';font-size:15px;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);font-weight:400;margin:26px 2px 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .awards-sec-title+.award-grid{margin-top:0}
   .grave-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:8px}
   .grave-card{display:flex;align-items:center;gap:11px;background:rgba(0,0,0,.22);border:1px solid var(--line);border-radius:12px;padding:10px 12px 10px 14px;position:relative;animation:pop .35s ease both}
   .grave-card::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--red)}
@@ -1670,50 +1672,75 @@ function awardsPanel(){
   const isOut=t=>!!(state.scores[t]&&state.scores[t].out);
   const roundName={0:"Group stage",1:"Round of 32",2:"Round of 16",3:"Quarter-final",4:"Semi-final",5:"Final",6:"Champions"};
   const flag=t=>`<span class="flag">${flagOf(t)}</span>`;
+  const tierRank=t=>({A:0,B:1,C:2,D:3})[tierOf(t)];
+  const rankTeams=arr=>arr.map(t=>({team:t,st:stg(t),out:isOut(t),pts:teamPts(t),owner:ownerOf(t)})).sort((x,y)=>y.st-x.st||(x.out-y.out)||y.pts-x.pts);
+  const allOwned=[];PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>allOwned.push(t)));
+  // goals scored across all competitions (group + knockout)
+  const koGoals={};Object.keys(KO_RESULTS).forEach(k=>{const n=Number(k),r=KO_RESULTS[n],tm=koMatchTeams(n);if(tm.a)koGoals[tm.a]=(koGoals[tm.a]||0)+r.aScore;if(tm.b)koGoals[tm.b]=(koGoals[tm.b]||0)+r.bScore;});
+  const goalsAll=t=>((gm[t]&&gm[t].gf)||0)+(koGoals[t]||0);
 
-  // ---- knockout-aware awards ----
-  // furthest surviving nation (deepest stage; ties broken by still-alive, then points)
+  // deepest surviving nation
   let furthest=null;
-  PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{const s=state.scores[t];if(!s)return;
-    const c={team:t,st:stg(t),pts:teamPts(t),owner:p,out:isOut(t)};
-    if(!furthest||c.st>furthest.st||(c.st===furthest.st&&!c.out&&furthest.out)||(c.st===furthest.st&&c.out===furthest.out&&c.pts>furthest.pts))furthest=c;}));
-  // most nations still alive in the knockouts
-  const koAlive=PLAYERS.map(p=>{const teams=allOwnedTeams(p).filter(t=>stg(t)>=1&&!isOut(t));return {p,n:teams.length,teams};}).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
-  // most points banked purely from knockout progression
+  PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{const s=state.scores[t];if(!s)return;const c={team:t,st:stg(t),pts:teamPts(t),owner:p,out:isOut(t)};if(!furthest||c.st>furthest.st||(c.st===furthest.st&&!c.out&&furthest.out)||(c.st===furthest.st&&c.out===furthest.out&&c.pts>furthest.pts))furthest=c;}));
+  const koAlive=PLAYERS.map(p=>{const teams=allOwnedTeams(p).filter(t=>stg(t)>=1&&!isOut(t));return{p,n:teams.length,teams};}).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
   const koPts=PLAYERS.map(p=>({p,n:allOwnedTeams(p).reduce((x,t)=>x+STAGE_CUM[stg(t)],0)})).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
-  // giant-killer: owner whose nation has toppled the most higher-tier sides
+  // penalty shootouts & extra time
+  const soWin=[],soLose=[],aetArr=[];
+  Object.keys(KO_RESULTS).forEach(k=>{const n=Number(k),r=KO_RESULTS[n],tm=koMatchTeams(n),w=r.winner,l=tm.a===w?tm.b:tm.a;if(r.pens){soWin.push(w);if(l)soLose.push(l);}if(r.aet)aetArr.push(w);});
+  const nerves=rankTeams(soWin)[0];const cruel=rankTeams(soLose)[0];const aetW=rankTeams(aetArr)[0];
+  // fallen giant: highest-tier nation with the earliest exit
+  let fallen=null;
+  PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{if(!isOut(t))return;const tr=tierRank(t),st=stg(t);if(!fallen||tr<fallen.tr||(tr===fallen.tr&&st<fallen.st))fallen={team:t,tr,st,owner:p};}));
+  // giant-killer & cinderella
   let upset={p:null,n:0,team:null};
   PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{const n=(state.scores[t]&&state.scores[t].gk)||0;if(n>upset.n)upset={p,n,team:t};}));
-  // best Cinderella (D-tier bonus nation) by points
   const cinders=PLAYERS.map(p=>({p,team:(state.assignments[p]||{}).D})).filter(x=>x.team).map(x=>({p:x.p,team:x.team,pts:teamPts(x.team),st:stg(x.team),out:isOut(x.team)})).sort((a,b)=>b.pts-a.pts||a.p.localeCompare(b.p))[0];
-
-  // ---- group-stage stat leaders (banked history) ----
+  // goals / stat leaders
+  let golden=null;allOwned.forEach(t=>{const g=goalsAll(t);if(g>0&&(!golden||g>golden.g))golden={team:t,g,owner:ownerOf(t)};});
   const goalMachine=agg.slice().sort((x,y)=>y.gf-x.gf||x.p.localeCompare(y.p))[0];
   const ironDef=agg.filter(x=>x.played>0).sort((x,y)=>x.ga-y.ga||y.played-x.played||x.p.localeCompare(y.p))[0];
   const bestGD=agg.slice().sort((x,y)=>y.gd-x.gd||x.p.localeCompare(y.p))[0];
-  let sharp=null;Object.keys(gm).forEach(t=>{if(gm[t].gf>0&&(!sharp||gm[t].gf>sharp.gf))sharp={team:t,gf:gm[t].gf};});
-
-  // ---- tournament progress line ----
+  // biggest win, all competitions
+  let bw=null;
+  const consider=(a,b,ta,tb)=>{if(a===b)return;const m=Math.abs(a-b),wgf=Math.max(a,b),wt=a>b?ta:tb,lt=a>b?tb:ta;if(!bw||m>bw.m||(m===bw.m&&wgf>bw.gf))bw={team:wt,opp:lt,gf:wgf,ga:Math.min(a,b),m};};
+  MATCH_PREVIEWS.forEach(m=>{const x=state.matchStates[matchKey(m)];if(!x||x.status!=="final"||x.aScore===""||x.bScore==="")return;consider(Number(x.aScore),Number(x.bScore),m.a,m.b);});
+  Object.keys(KO_RESULTS).forEach(k=>{const n=Number(k),r=KO_RESULTS[n],tm=koMatchTeams(n);if(tm.a&&tm.b)consider(r.aScore,r.bScore,tm.a,tm.b);});
+  // progress line
   const teamsLeft=Object.keys(state.scores).filter(t=>stg(t)>=1&&!isOut(t)).length;
   const deepest=furthest?furthest.st:0;
   const progress=deepest>=1?`<b style="color:var(--cream)">${roundName[deepest]}${deepest<6?"s":""} &middot; ${teamsLeft} nation${teamsLeft===1?"":"s"} still standing.</b>`:`<b style="color:var(--cream)">Group stage under way.</b>`;
 
-  const cards=[
-    {k:"&#127942; Top Dog", v:playerLink(lead.p), s:`Leads the league on <b style="color:var(--cream)">${lead.pts}</b> pts.`},
-    {k:"&#128640; Deepest Run", v:furthest?`${flag(furthest.team)} ${esc(furthest.team)}`:"TBC", s:furthest?`${roundName[furthest.st]}${furthest.out?" &mdash; knocked out":""} &middot; owned by ${esc(furthest.owner)}`:"Knockouts not under way yet."},
-    {k:"&#129337;&#65039; Last Squad Standing", v:koAlive&&koAlive.n?`${playerLink(koAlive.p)} &middot; ${koAlive.n}`:"Nobody", s:koAlive&&koAlive.n?`Still alive: ${koAlive.teams.map(t=>esc(t)).join(", ")}.`:"Every nation is out &mdash; it's all banked points now."},
-    {k:"&#127941; Knockout Merchant", v:koPts&&koPts.n?`${playerLink(koPts.p)} &middot; ${koPts.n}`:"TBC", s:"Most points banked from knockout progression (R32 onward)."},
-    {k:"&#128481;&#65039; Giant-Killer", v:upset.n?`${playerLink(upset.p)} &middot; ${upset.n}`:"None yet", s:upset.n?`${flag(upset.team)} ${esc(upset.team)} has toppled a higher tier ${upset.n>1?upset.n+" times":"once"} (+5 each).`:"No higher-tier scalps yet."},
-    {k:"&#127993; Golden Nation", v:gn?`${flag(gn.team)} ${esc(gn.team)}`:"TBC", s:gn?`Top-scoring nation &middot; <b style="color:var(--cream)">${gn.pts}</b> pts &middot; owned by ${esc(gn.owner)}`:"No points yet."},
-    {k:"&#10024; Cinderella Run", v:cinders?`${flag(cinders.team)} ${esc(cinders.team)}`:"No bonus team", s:cinders?`${playerLink(cinders.p)} &middot; ${cinders.pts} pts &middot; reached the ${roundName[cinders.st]}${cinders.out?" (out)":""}`:"No Cinderella nation was drawn."},
-    {k:"&#9917; Goal Machine", v:played&&goalMachine.gf>0?`${playerLink(goalMachine.p)} &middot; ${goalMachine.gf}`:"TBC", s:"Most goals scored &middot; group stage."},
-    {k:"&#129508; Iron Defense", v:ironDef?`${playerLink(ironDef.p)} &middot; ${ironDef.ga}`:"TBC", s:"Fewest goals conceded &middot; group stage."},
-    {k:"&#9878;&#65039; Best Goal Difference", v:played?`${playerLink(bestGD.p)} &middot; ${bestGD.gd>0?"+":""}${bestGD.gd}`:"TBC", s:"Best aggregate goal difference &middot; group stage."},
-    {k:"&#127919; Sharpest Nation", v:sharp?`${flag(sharp.team)} ${esc(sharp.team)} &middot; ${sharp.gf}`:"TBC", s:sharp?`Top-scoring single nation &middot; group &middot; ${esc(ownerOf(sharp.team)||"nobody")}`:"No goals yet."},
-    {k:"&#129681; Wooden Spoon", v:playerLink(spoon.p), s:`Bottom of the table on ${spoon.pts} pts &mdash; coffee duty beckons. Just data with a smirk.`}
+  const C=(k,v,sub)=>({k,v,s:sub});
+  const sections=[
+    {t:"Race for the Pot",cards:[
+      C("&#127942; Top Dog",playerLink(lead.p),`Leads the league on <b style="color:var(--cream)">${lead.pts}</b> pts.`),
+      C("&#129681; Wooden Spoon",playerLink(spoon.p),`Bottom on ${spoon.pts} pts &mdash; coffee duty beckons. Just data with a smirk.`)
+    ]},
+    {t:"Knockout Drama",cards:[
+      C("&#128640; Deepest Run",furthest?`${flag(furthest.team)} ${esc(furthest.team)}`:"TBC",furthest?`${roundName[furthest.st]}${furthest.out?" &mdash; knocked out":""} &middot; ${esc(furthest.owner)}`:"Knockouts not under way yet."),
+      C("&#129337;&#65039; Last Squad Standing",koAlive&&koAlive.n?`${playerLink(koAlive.p)} &middot; ${koAlive.n}`:"Nobody",koAlive&&koAlive.n?`Still alive: ${koAlive.teams.map(t=>esc(t)).join(", ")}.`:"Every nation is out &mdash; all banked now."),
+      C("&#127941; Knockout Merchant",koPts&&koPts.n?`${playerLink(koPts.p)} &middot; ${koPts.n}`:"TBC","Most points banked from knockout progression."),
+      C("&#129482; Nerves of Steel",nerves?`${flag(nerves.team)} ${esc(nerves.team)}`:"None yet",nerves?`Won a penalty shootout &middot; ${esc(nerves.owner)}`:"No shootouts won yet."),
+      C("&#128148; Cruel Exit",cruel?`${flag(cruel.team)} ${esc(cruel.team)}`:"None yet",cruel?`Out on penalties in the ${roundName[cruel.st]} &middot; ${esc(cruel.owner)}`:"No shootout heartbreak yet."),
+      C("&#9201;&#65039; Extra-Time Warrior",aetW?`${flag(aetW.team)} ${esc(aetW.team)}`:"None yet",aetW?`Won it after extra time &middot; ${esc(aetW.owner)}`:"No extra-time wins yet."),
+      C("&#128201; Fallen Giant",fallen?`${flag(fallen.team)} ${esc(fallen.team)}`:"None yet",fallen?`Tier ${tierOf(fallen.team)} side out in the ${roundName[fallen.st]} &middot; ${esc(fallen.owner)}`:"No big names have fallen.")
+    ]},
+    {t:"Giant-Killers & Underdogs",cards:[
+      C("&#128481;&#65039; Giant-Killer",upset.n?`${playerLink(upset.p)} &middot; ${upset.n}`:"None yet",upset.n?`${flag(upset.team)} ${esc(upset.team)} has toppled a higher tier ${upset.n>1?upset.n+" times":"once"} (+5 each).`:"No higher-tier scalps yet."),
+      C("&#10024; Cinderella Run",cinders?`${flag(cinders.team)} ${esc(cinders.team)}`:"No bonus team",cinders?`${playerLink(cinders.p)} &middot; ${cinders.pts} pts &middot; reached the ${roundName[cinders.st]}${cinders.out?" (out)":""}`:"No Cinderella nation drawn.")
+    ]},
+    {t:"Top Nations & Stat Leaders",cards:[
+      C("&#127993; Golden Nation",gn?`${flag(gn.team)} ${esc(gn.team)}`:"TBC",gn?`Top nation by points &middot; <b style="color:var(--cream)">${gn.pts}</b> pts &middot; ${esc(gn.owner)}`:"No points yet."),
+      C("&#128098; Golden Boot",golden?`${flag(golden.team)} ${esc(golden.team)} &middot; ${golden.g}`:"TBC",golden?`Most goals scored, all rounds &middot; ${esc(golden.owner)}`:"No goals yet."),
+      C("&#128165; Biggest Win",bw?`${flag(bw.team)} ${esc(bw.team)} ${bw.gf}-${bw.ga}`:"TBC",bw?`v ${esc(bw.opp)} &middot; the tournament's most emphatic result &middot; ${esc(ownerOf(bw.team)||"nobody")}`:"No matches played."),
+      C("&#9917; Goal Machine",played&&goalMachine.gf>0?`${playerLink(goalMachine.p)} &middot; ${goalMachine.gf}`:"TBC","Most goals across their nations &middot; group stage."),
+      C("&#129508; Iron Defense",ironDef?`${playerLink(ironDef.p)} &middot; ${ironDef.ga}`:"TBC","Fewest goals conceded &middot; group stage."),
+      C("&#9878;&#65039; Best Goal Difference",played?`${playerLink(bestGD.p)} &middot; ${bestGD.gd>0?"+":""}${bestGD.gd}`:"TBC","Best aggregate goal difference &middot; group stage.")
+    ]}
   ];
-  const grid=cards.map(c=>`<div class="award"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="s">${c.s}</div></div>`).join("");
-  return `<div class="insights-hero"><h2>The <span>Awards</span></h2><p>The office trophy cabinet, scored straight from your results and updated live through the knockouts. ${progress} Group-stage stat leaders stay on the board as banked history.</p></div><div class="award-grid awards-page">${grid}</div>`;
+  const cardHTML=c=>`<div class="award"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="s">${c.s}</div></div>`;
+  const bodyHTML=sections.map(sec=>`<div class="awards-sec-title">${sec.t}</div><div class="award-grid awards-page">${sec.cards.map(cardHTML).join("")}</div>`).join("");
+  return `<div class="insights-hero"><h2>The <span>Awards</span></h2><p>The office trophy cabinet, scored straight from your results and updated live through the knockouts. ${progress}</p></div>${bodyHTML}`;
 }
 function insightsPanel(){return awardsPanel();}
 
