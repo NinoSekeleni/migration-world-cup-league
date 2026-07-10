@@ -1663,33 +1663,57 @@ function eliminatedPanel(){
 
 function awardsPanel(){
   if(!state.drawn)return emptyState("No awards yet","The trophy cabinet fills up once the draw is done and results start landing.");
-  const a=awardsData();const climber=biggestClimber();const gn=goldenNation();const lead=leagueStandings()[0];
+  const board=leagueStandings();const lead=board[0];const spoon=board[board.length-1];
+  const gn=goldenNation();
   const gm=teamGoalMap();const agg=playerGoalAgg();const played=playedResults().length;
+  const stg=t=>(state.scores[t]&&state.scores[t].stage)||0;
+  const isOut=t=>!!(state.scores[t]&&state.scores[t].out);
+  const roundName={0:"Group stage",1:"Round of 32",2:"Round of 16",3:"Quarter-final",4:"Semi-final",5:"Final",6:"Champions"};
+  const flag=t=>`<span class="flag">${flagOf(t)}</span>`;
+
+  // ---- knockout-aware awards ----
+  // furthest surviving nation (deepest stage; ties broken by still-alive, then points)
+  let furthest=null;
+  PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{const s=state.scores[t];if(!s)return;
+    const c={team:t,st:stg(t),pts:teamPts(t),owner:p,out:isOut(t)};
+    if(!furthest||c.st>furthest.st||(c.st===furthest.st&&!c.out&&furthest.out)||(c.st===furthest.st&&c.out===furthest.out&&c.pts>furthest.pts))furthest=c;}));
+  // most nations still alive in the knockouts
+  const koAlive=PLAYERS.map(p=>{const teams=allOwnedTeams(p).filter(t=>stg(t)>=1&&!isOut(t));return {p,n:teams.length,teams};}).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
+  // most points banked purely from knockout progression
+  const koPts=PLAYERS.map(p=>({p,n:allOwnedTeams(p).reduce((x,t)=>x+STAGE_CUM[stg(t)],0)})).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
+  // giant-killer: owner whose nation has toppled the most higher-tier sides
+  let upset={p:null,n:0,team:null};
+  PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{const n=(state.scores[t]&&state.scores[t].gk)||0;if(n>upset.n)upset={p,n,team:t};}));
+  // best Cinderella (D-tier bonus nation) by points
+  const cinders=PLAYERS.map(p=>({p,team:(state.assignments[p]||{}).D})).filter(x=>x.team).map(x=>({p:x.p,team:x.team,pts:teamPts(x.team),st:stg(x.team),out:isOut(x.team)})).sort((a,b)=>b.pts-a.pts||a.p.localeCompare(b.p))[0];
+
+  // ---- group-stage stat leaders (banked history) ----
   const goalMachine=agg.slice().sort((x,y)=>y.gf-x.gf||x.p.localeCompare(y.p))[0];
-  const defenders=agg.filter(x=>x.played>0).sort((x,y)=>x.ga-y.ga||y.played-x.played||x.p.localeCompare(y.p));
-  const ironDef=defenders[0];
+  const ironDef=agg.filter(x=>x.played>0).sort((x,y)=>x.ga-y.ga||y.played-x.played||x.p.localeCompare(y.p))[0];
   const bestGD=agg.slice().sort((x,y)=>y.gd-x.gd||x.p.localeCompare(y.p))[0];
-  const winMachine=agg.slice().sort((x,y)=>y.w-x.w||x.p.localeCompare(y.p))[0];
   let sharp=null;Object.keys(gm).forEach(t=>{if(gm[t].gf>0&&(!sharp||gm[t].gf>sharp.gf))sharp={team:t,gf:gm[t].gf};});
-  const qual=confirmedQualifiers();
-  const qk=PLAYERS.map(p=>({p,n:allOwnedTeams(p).filter(t=>qual.has(t)).length})).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
+
+  // ---- tournament progress line ----
+  const teamsLeft=Object.keys(state.scores).filter(t=>stg(t)>=1&&!isOut(t)).length;
+  const deepest=furthest?furthest.st:0;
+  const progress=deepest>=1?`<b style="color:var(--cream)">${roundName[deepest]}${deepest<6?"s":""} &middot; ${teamsLeft} nation${teamsLeft===1?"":"s"} still standing.</b>`:`<b style="color:var(--cream)">Group stage under way.</b>`;
+
   const cards=[
-    {k:"&#127942; Top Dog",v:playerLink(a.leader.p),s:`Leads the league on ${lead?lead.pts:a.leader.pts} pts.`},
-    {k:"&#127993; Golden Nation",v:gn?`<span class="flag">${flagOf(gn.team)}</span> ${esc(gn.team)}`:"TBC",s:gn?`${gn.pts} pts &middot; owned by ${esc(gn.owner)}`:"No points yet."},
-    {k:"&#9917; Goal Machine",v:played&&goalMachine.gf>0?`${playerLink(goalMachine.p)} &middot; ${goalMachine.gf}`:"TBC",s:played&&goalMachine.gf>0?"Most goals scored across their nations.":"No goals scored yet."},
-    {k:"&#127919; Sharpest Nation",v:sharp?`<span class="flag">${flagOf(sharp.team)}</span> ${esc(sharp.team)} &middot; ${sharp.gf}`:"TBC",s:sharp?`Highest-scoring single team &middot; owned by ${esc(ownerOf(sharp.team)||"nobody")}`:"No goals scored yet."},
-    {k:"&#129508; Iron Defense",v:ironDef?`${playerLink(ironDef.p)} &middot; ${ironDef.ga}`:"TBC",s:ironDef?"Fewest goals conceded across their nations.":"Awarded once matches are played."},
-    {k:"&#9878;&#65039; Best Goal Difference",v:played?`${playerLink(bestGD.p)} &middot; ${bestGD.gd>0?"+":""}${bestGD.gd}`:"TBC",s:played?"Best aggregate goal difference across their nations.":"Awarded once matches are played."},
-    {k:"&#128293; Win Machine",v:played&&winMachine.w>0?`${playerLink(winMachine.p)} &middot; ${winMachine.w}`:"TBC",s:played&&winMachine.w>0?"Most group-stage wins across their nations.":"No wins logged yet."},
-    {k:"&#127903;&#65039; Qualification King",v:qk&&qk.n>0?`${playerLink(qk.p)} &middot; ${qk.n}`:"TBC",s:qk&&qk.n>0?"Most nations into the Round of 32.":"No qualifiers locked yet."},
-    {k:"&#128302; Giant-Killer",v:`${esc(a.upset.p)} &middot; ${a.upset.n}`,s:esc(a.upset.team)},
-    {k:"&#10024; Cinderella Run",v:a.cinders?playerLink(a.cinders.p):"TBC",s:a.cinders?`${esc(a.cinders.team)} &middot; ${a.cinders.pts} pts`:"No Cinderella bonus points yet."},
-    {k:"&#128170; Most Alive",v:`${playerLink(a.alive.p)} &middot; ${a.alive.n}`,s:"Most nations still breathing in the draw."},
-    {k:"&#128200; Mover of the Round",v:climber?playerLink(climber.p):"TBC",s:climber?`Climbed ${climber.n} place${climber.n>1?"s":""} since the last matchday.`:"Movement appears once a second matchday is played."},
-    {k:"&#129681; Wooden Spoon",v:playerLink(a.spoon.p),s:"Bottom of the table. Coffee run incoming &mdash; just data with a smirk."}
+    {k:"&#127942; Top Dog", v:playerLink(lead.p), s:`Leads the league on <b style="color:var(--cream)">${lead.pts}</b> pts.`},
+    {k:"&#128640; Deepest Run", v:furthest?`${flag(furthest.team)} ${esc(furthest.team)}`:"TBC", s:furthest?`${roundName[furthest.st]}${furthest.out?" &mdash; knocked out":""} &middot; owned by ${esc(furthest.owner)}`:"Knockouts not under way yet."},
+    {k:"&#129337;&#65039; Last Squad Standing", v:koAlive&&koAlive.n?`${playerLink(koAlive.p)} &middot; ${koAlive.n}`:"Nobody", s:koAlive&&koAlive.n?`Still alive: ${koAlive.teams.map(t=>esc(t)).join(", ")}.`:"Every nation is out &mdash; it's all banked points now."},
+    {k:"&#127941; Knockout Merchant", v:koPts&&koPts.n?`${playerLink(koPts.p)} &middot; ${koPts.n}`:"TBC", s:"Most points banked from knockout progression (R32 onward)."},
+    {k:"&#128481;&#65039; Giant-Killer", v:upset.n?`${playerLink(upset.p)} &middot; ${upset.n}`:"None yet", s:upset.n?`${flag(upset.team)} ${esc(upset.team)} has toppled a higher tier ${upset.n>1?upset.n+" times":"once"} (+5 each).`:"No higher-tier scalps yet."},
+    {k:"&#127993; Golden Nation", v:gn?`${flag(gn.team)} ${esc(gn.team)}`:"TBC", s:gn?`Top-scoring nation &middot; <b style="color:var(--cream)">${gn.pts}</b> pts &middot; owned by ${esc(gn.owner)}`:"No points yet."},
+    {k:"&#10024; Cinderella Run", v:cinders?`${flag(cinders.team)} ${esc(cinders.team)}`:"No bonus team", s:cinders?`${playerLink(cinders.p)} &middot; ${cinders.pts} pts &middot; reached the ${roundName[cinders.st]}${cinders.out?" (out)":""}`:"No Cinderella nation was drawn."},
+    {k:"&#9917; Goal Machine", v:played&&goalMachine.gf>0?`${playerLink(goalMachine.p)} &middot; ${goalMachine.gf}`:"TBC", s:"Most goals scored &middot; group stage."},
+    {k:"&#129508; Iron Defense", v:ironDef?`${playerLink(ironDef.p)} &middot; ${ironDef.ga}`:"TBC", s:"Fewest goals conceded &middot; group stage."},
+    {k:"&#9878;&#65039; Best Goal Difference", v:played?`${playerLink(bestGD.p)} &middot; ${bestGD.gd>0?"+":""}${bestGD.gd}`:"TBC", s:"Best aggregate goal difference &middot; group stage."},
+    {k:"&#127919; Sharpest Nation", v:sharp?`${flag(sharp.team)} ${esc(sharp.team)} &middot; ${sharp.gf}`:"TBC", s:sharp?`Top-scoring single nation &middot; group &middot; ${esc(ownerOf(sharp.team)||"nobody")}`:"No goals yet."},
+    {k:"&#129681; Wooden Spoon", v:playerLink(spoon.p), s:`Bottom of the table on ${spoon.pts} pts &mdash; coffee duty beckons. Just data with a smirk.`}
   ];
   const grid=cards.map(c=>`<div class="award"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="s">${c.s}</div></div>`).join("");
-  return `<div class="insights-hero"><h2>The <span>Awards</span></h2><p>The office trophy cabinet, scored straight from your results &mdash; and there's plenty to chase even once your nations are knocked out. Goals, clean sheets, upsets and qualifiers all bank bragging rights, so nobody's playing for nothing. Updates automatically as matches go final.</p></div><div class="award-grid awards-page">${grid}</div>`;
+  return `<div class="insights-hero"><h2>The <span>Awards</span></h2><p>The office trophy cabinet, scored straight from your results and updated live through the knockouts. ${progress} Group-stage stat leaders stay on the board as banked history.</p></div><div class="award-grid awards-page">${grid}</div>`;
 }
 function insightsPanel(){return awardsPanel();}
 
