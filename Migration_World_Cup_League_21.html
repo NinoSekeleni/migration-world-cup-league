@@ -1046,7 +1046,8 @@ const KO_RESULTS = {
   97:{aScore:0,bScore:2,winner:"France"},
   98:{aScore:1,bScore:2,aet:true,winner:"England"},
   99:{aScore:2,bScore:1,winner:"Spain"},
-  100:{aScore:3,bScore:1,aet:true,winner:"Argentina"}
+  100:{aScore:3,bScore:1,aet:true,winner:"Argentina"},
+  101:{aScore:0,bScore:2,winner:"Spain"}
 };
 // How Round-of-32 winners feed the Round of 16 (a/b are R32 match numbers).
 const R16_TIES = [
@@ -1055,7 +1056,7 @@ const R16_TIES = [
 ];
 // Later rounds: a/b are the match numbers whose winners feed the tie.
 const QF_TIES = [{n:97,a:89,b:90},{n:98,a:91,b:92},{n:99,a:93,b:94},{n:100,a:95,b:96}];
-const SF_TIES = [{n:101,a:97,b:98},{n:102,a:99,b:100}];
+const SF_TIES = [{n:101,a:97,b:99},{n:102,a:98,b:100}];
 const FINAL_TIE = {n:104,a:101,b:102};
 const KO_FEEDERS = [...R16_TIES,...QF_TIES,...SF_TIES,FINAL_TIE];
 function r32TieOf(n){return R32_TIES.find(t=>t.n===n);}
@@ -1687,6 +1688,9 @@ function awardsPanel(){
   PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{const s=state.scores[t];if(!s)return;const c={team:t,st:stg(t),pts:teamPts(t),owner:p,out:isOut(t)};if(!furthest||c.st>furthest.st||(c.st===furthest.st&&!c.out&&furthest.out)||(c.st===furthest.st&&c.out===furthest.out&&c.pts>furthest.pts))furthest=c;}));
   const koAlive=PLAYERS.map(p=>{const teams=allOwnedTeams(p).filter(t=>stg(t)>=1&&!isOut(t));return{p,n:teams.length,teams};}).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
   const koPts=PLAYERS.map(p=>({p,n:allOwnedTeams(p).reduce((x,t)=>x+STAGE_CUM[stg(t)],0)})).sort((x,y)=>y.n-x.n||x.p.localeCompare(y.p))[0];
+  // finalists (reached the Final) and champion (won it)
+  const finalists=[];let champion=null;
+  PLAYERS.forEach(p=>allOwnedTeams(p).forEach(t=>{if(stg(t)>=5)finalists.push({team:t,owner:p});if(stg(t)>=6)champion={team:t,owner:p};}));
   // penalty shootouts & extra time
   const soWin=[],soLose=[],aetArr=[];
   Object.keys(KO_RESULTS).forEach(k=>{const n=Number(k),r=KO_RESULTS[n],tm=koMatchTeams(n),w=r.winner,l=tm.a===w?tm.b:tm.a;if(r.pens){soWin.push(w);if(l)soLose.push(l);}if(r.aet)aetArr.push(w);});
@@ -1720,6 +1724,9 @@ function awardsPanel(){
       C("&#129681; Wooden Spoon",playerLink(spoon.p),`Bottom on ${spoon.pts} pts &mdash; coffee duty beckons. Just data with a smirk.`)
     ]},
     {t:"Knockout Drama",cards:[
+      champion
+        ? C("&#127942; World Champion",`${flag(champion.team)} ${esc(champion.team)}`,`Winners of the whole thing &middot; ${esc(champion.owner)} takes the crown.`)
+        : C("&#127915; Finalist"+(finalists.length>1?"s":""),finalists.length?finalists.map(f=>`${flag(f.team)} ${esc(f.team)}`).join(" &amp; "):"TBC",finalists.length?`Into the World Cup Final &middot; ${finalists.map(f=>esc(f.owner)).join(" &amp; ")}`:"Locked in once a semi-final is won."),
       C("&#128640; Deepest Run",furthest?`${flag(furthest.team)} ${esc(furthest.team)}`:"TBC",furthest?`${roundName[furthest.st]}${furthest.out?" &mdash; knocked out":""} &middot; ${esc(furthest.owner)}`:"Knockouts not under way yet."),
       C("&#129337;&#65039; Last Squad Standing",koAlive&&koAlive.n?`${playerLink(koAlive.p)} &middot; ${koAlive.n}`:"Nobody",koAlive&&koAlive.n?`Still alive: ${koAlive.teams.map(t=>esc(t)).join(", ")}.`:"Every nation is out &mdash; all banked now."),
       C("&#127941; Knockout Merchant",koPts&&koPts.n?`${playerLink(koPts.p)} &middot; ${koPts.n}`:"TBC","Most points banked from knockout progression."),
