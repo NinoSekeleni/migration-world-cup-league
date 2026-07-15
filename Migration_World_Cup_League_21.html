@@ -1162,10 +1162,33 @@ function knockoutBracketPanel(){
 }
 function bracketPanel(){return knockoutBracketPanel();}
 // compact landing strip: the 16 R32 ties scrolling horizontally
+// A knockout tie card for any round (used by the sticky strip). Resolves teams from
+// the bracket, shows scores/winner styling once played, and a "Winner Mxx" placeholder
+// for a side that is still to be decided.
+function koStripCard(label,n){
+  const tm=koMatchTeams(n),r=KO_RESULTS[n],w=r&&r.winner,feed=KO_FEEDERS.find(x=>x.n===n)||{};
+  const row=(team,score,ph)=>{
+    if(team){const o=ownerOf(team),cls=w?(team===w?"won":"lost"):"in";
+      return `<div class="ko-team ${cls}"><span class="flag">${flagOf(team)}</span><span class="ko-name">${esc(team)}</span>${o?`<span class="ko-owner">${esc(o)}</span>`:""}${score!==undefined?`<span class="ko-score">${esc(score)}</span>`:""}</div>`;}
+    return `<div class="ko-team tbd"><span class="ko-name">${esc(ph)}</span></div>`;
+  };
+  const extra=r?(r.pens?`<div class="ko-pens">${esc(r.winner)} ${esc(r.pens)} on penalties</div>`:(r.aet?`<div class="ko-pens">${esc(r.winner)} won after extra time</div>`:"")):"";
+  return `<div class="ko-tie${r?' done':''}"><div class="ko-no">${label} &middot; M${n}</div>${row(tm.a,r?r.aScore:undefined,feed.a?`Winner M${feed.a}`:"TBD")}<div class="ko-v">${r?'&middot;':'v'}</div>${row(tm.b,r?r.bScore:undefined,feed.b?`Winner M${feed.b}`:"TBD")}${extra}</div>`;
+}
+// Sticky "Road to the Final" strip: always shows the business end of the bracket,
+// from the deepest round that has a result through to the Final.
 function knockoutStripLanding(){
   if(!state||!state.drawn)return "";
-  const cards=R32_TIES.map(r32TieCard).join("");
-  return `<section class="ko-band"><div class="ko-band-head"><h2>Road to the Final <span>&middot; Round of 32</span></h2><div class="ko-band-sub">${koHeadline()} &middot; winners in green, knocked-out teams struck through</div></div><div class="ko-strip">${cards}</div></section>`;
+  const rounds=[
+    {lab:"Round of 32",ns:R32_TIES.map(t=>t.n)},
+    {lab:"Round of 16",ns:R16_TIES.map(t=>t.n)},
+    {lab:"Quarter-final",ns:QF_TIES.map(t=>t.n)},
+    {lab:"Semi-final",ns:SF_TIES.map(t=>t.n)},
+    {lab:"Final",ns:[FINAL_TIE.n]}
+  ];
+  let startIdx=0;rounds.forEach((r,i)=>{if(r.ns.some(n=>KO_RESULTS[n]))startIdx=i;});
+  const cards=rounds.slice(startIdx).flatMap(r=>r.ns.map(n=>koStripCard(r.lab,n))).join("");
+  return `<section class="ko-band"><div class="ko-band-head"><h2>Road to the <span>Final</span></h2><div class="ko-band-sub">${koHeadline()} &middot; winners in green, knocked-out teams struck through</div></div><div class="ko-strip">${cards}</div></section>`;
 }
 function groupsPanel(){const standings=groupStandings();const cards=groupOrder().map(g=>groupCard(g,standings[g]||[])).join("");return `<div class="groups-wrap"><div class="sectionhead"><h2>Groups</h2><p>Real 2026 group-stage groups. Scores from the Matches tab flow into these tables when a match is set to <strong style="color:var(--cream)">Live</strong> or <strong style="color:var(--cream)">Final</strong>. Live scores are provisional until you mark full-time.</p></div><div class="groupgrid">${cards}</div>${thirdPlaceTable(standings)}<div class="sectionhead"><h2>Knockout Bracket</h2><p>Keep this as the knockout home. Once the group stage is complete, you can replace the placeholder slots with the confirmed Round of 32 draw.</p></div>${bracketPanel()}</div>`;}
 
@@ -1757,15 +1780,16 @@ function insightsPanel(){return awardsPanel();}
 function doneDrawPanel(){
   const conf=confirmedQualifiers().size;
   const elimCount=eliminatedTeams().size;
-  const openingRivalry=rivalryLine({a:"Mexico",b:"South Africa"});
+  const alive=Object.keys(state.scores).filter(t=>(state.scores[t].stage||0)>=1&&!state.scores[t].out).length;
+  const roundLbl=alive<=1?"Champion crowned":alive<=2?"The Final":alive<=4?"Semi-finals":alive<=8?"Quarter-finals":alive<=16?"Round of 16":"Round of 32";
   return `<div class="matchday-live">
     <div class="matchday-top">
-      <div><div class="matchday-title">Road to <span>the Final</span></div><div class="matchday-copy">The home screen now follows the knockout bracket. Nations slot into the Round of 32 automatically as each group is completed in <strong style="color:var(--cream)">Matches</strong>, and knocked-out teams drop to the graveyard below. Even once your nations are out, keep banking bragging rights over in <strong style="color:var(--cream)">Awards</strong>.</div></div>
-      <div class="matchday-stats"><span class="statpill"><b>${conf}</b>/32 through</span><span class="statpill"><b>${elimCount}</b> eliminated</span><span class="statpill live"><b>${PLAYERS.length}</b> still in the hunt</span></div>
+      <div><div class="matchday-title">Road to <span>the Final</span></div><div class="matchday-copy">The home screen follows the full knockout bracket, updated live as results land. Knocked-out nations drop to the graveyard below, and even once your teams are out you can keep banking bragging rights over in <strong style="color:var(--cream)">Awards</strong>.</div></div>
+      <div class="matchday-stats"><span class="statpill live"><b>${alive}</b> still standing</span><span class="statpill"><b>${elimCount}</b> eliminated</span><span class="statpill">${roundLbl}</span></div>
     </div>
-    <div class="rivalry-strip"><div class="rivalry-card"><b>Knockout watch:</b> Slots fill from the top two of every group, plus the eight best third-placed nations &mdash; the full draw locks when the group stage ends on 27 Jun.</div><div class="rivalry-card"><b>Locked draw:</b> Browser resets will not randomise the league again. The same office draw reloads every time.</div></div>
+    <div class="rivalry-strip"><div class="rivalry-card"><b>Road to the final:</b> single-elimination all the way to the MetLife final on 19 Jul &mdash; 30 minutes of extra time then penalties settle any deadlock.</div><div class="rivalry-card"><b>Locked draw:</b> Browser resets will not randomise the league again. The same office draw reloads every time.</div></div>
   </div>
-  <div class="sectionhead"><h2>Knockout Bracket</h2><p>The live Round of 32 and the road to the MetLife final on 19 Jul. Teams appear automatically as groups finish; log knockout results in <strong style="color:var(--cream)">Rosters &amp; Scoring</strong>.</p></div>
+  <div class="sectionhead"><h2>Knockout Bracket</h2><p>The full knockout bracket through to the MetLife final on 19 Jul. Winners advance automatically as each result lands; log knockout scores in <strong style="color:var(--cream)">Rosters &amp; Scoring</strong>.</p></div>
   ${knockoutBracketPanel()}
   ${eliminatedPanel()}
 `;
@@ -1849,7 +1873,10 @@ function render(){
   if(hs){
     if(state&&state.drawn){
       const played=playedResults().length,total=MATCH_PREVIEWS.length,lead=leagueStandings()[0];
-      hs.innerHTML=`<span class="hdot"></span> Group stage live &middot; <b>${played}</b>/${total} matches played &middot; Leader <b>${lead?esc(lead.p):"TBC"}</b>${lead?` (${lead.pts} pts)`:""}`;
+      const kalive=Object.keys(state.scores).filter(t=>(state.scores[t].stage||0)>=1&&!state.scores[t].out).length;
+      const kround=kalive<=1?"Champion crowned":kalive<=2?"The Final":kalive<=4?"Semi-finals":kalive<=8?"Quarter-finals":kalive<=16?"Round of 16":"Round of 32";
+      const phase=played<total?`Group stage &middot; <b>${played}</b>/${total} played`:`${kround} &middot; <b>${kalive}</b> nation${kalive===1?"":"s"} still standing`;
+      hs.innerHTML=`<span class="hdot"></span> ${phase} &middot; Leader <b>${lead?esc(lead.p):"TBC"}</b>${lead?` (${lead.pts} pts)`:""}`;
     } else hs.innerHTML="";
   }
   wire();
