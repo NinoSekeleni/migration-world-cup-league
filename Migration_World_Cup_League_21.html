@@ -417,6 +417,11 @@
   .hdot{width:8px;height:8px;border-radius:50%;background:#4ec07a;box-shadow:0 0 0 0 rgba(78,192,122,.7);animation:hpulse 1.8s infinite}
   @keyframes hpulse{0%{box-shadow:0 0 0 0 rgba(78,192,122,.6)}70%{box-shadow:0 0 0 7px rgba(78,192,122,0)}100%{box-shadow:0 0 0 0 rgba(78,192,122,0)}}
   .awards-page{margin-top:14px}
+  .champ-banner{background:linear-gradient(135deg,rgba(232,183,63,.18),rgba(232,183,63,.03));border:1px solid var(--gold-dim);border-radius:18px;padding:20px;margin-bottom:16px;text-align:center;animation:pop .4s ease both}
+  .champ-banner .champ-k{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:900;margin-bottom:10px}
+  .champ-banner .champ-v{font-family:'Anton';font-size:clamp(26px,6vw,40px);text-transform:uppercase;color:var(--cream);line-height:1;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}
+  .champ-banner .champ-s{font-size:13px;color:var(--muted);margin-top:12px;line-height:1.5}
+  .champ-banner .champ-s b{color:var(--gold)}
   .awards-sec-title{font-family:'Anton';font-size:15px;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);font-weight:400;margin:26px 2px 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
   .awards-sec-title+.award-grid{margin-top:0}
   .grave-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:8px}
@@ -462,10 +467,10 @@
   <div id="koBandHost"></div>
 
   <nav class="tabs" id="tabs">
-    <button class="tab on" data-tab="draw">Home</button>
+    <button class="tab on" data-tab="board">Leaderboard</button>
     <button class="tab" data-tab="insights">Awards</button>
+    <button class="tab" data-tab="draw">Bracket</button>
     <button class="tab" data-tab="rosters">Rosters &amp; Scoring</button>
-    <button class="tab" data-tab="board">Leaderboard</button>
     <button class="tab" data-tab="matches">Matches</button>
     <button class="tab" data-tab="groups">Groups &amp; Brackets</button>
     <button class="tab" data-tab="rules">Rules</button>
@@ -1208,13 +1213,13 @@ function knockoutStripLanding(){
   ];
   let startIdx=0;rounds.forEach((r,i)=>{if(r.ns.some(n=>KO_RESULTS[n]))startIdx=i;});
   const cards=rounds.slice(startIdx).flatMap(r=>r.ns.map(n=>koStripCard(r.lab,n))).join("")+(KO_RESULTS[THIRD_TIE.n]?koStripCard("Third place",THIRD_TIE.n):"");
-  return `<section class="ko-band"><div class="ko-band-head"><h2>Road to the <span>Final</span></h2><div class="ko-band-sub">${koHeadline()} &middot; winners in green, knocked-out teams struck through</div></div><div class="ko-strip">${cards}</div></section>`;
+  return `<section class="ko-band"><div class="ko-band-head"><h2>${KO_RESULTS[FINAL_TIE.n]?`Tournament <span>Complete</span>`:`Road to the <span>Final</span>`}</h2><div class="ko-band-sub">${koHeadline()} &middot; winners in green, knocked-out teams struck through</div></div><div class="ko-strip">${cards}</div></section>`;
 }
 function groupsPanel(){const standings=groupStandings();const cards=groupOrder().map(g=>groupCard(g,standings[g]||[])).join("");return `<div class="groups-wrap"><div class="sectionhead"><h2>Groups</h2><p>Real 2026 group-stage groups. Scores from the Matches tab flow into these tables when a match is set to <strong style="color:var(--cream)">Live</strong> or <strong style="color:var(--cream)">Final</strong>. Live scores are provisional until you mark full-time.</p></div><div class="groupgrid">${cards}</div>${thirdPlaceTable(standings)}<div class="sectionhead"><h2>Knockout Bracket</h2><p>Keep this as the knockout home. Once the group stage is complete, you can replace the placeholder slots with the confirmed Round of 32 draw.</p></div>${bracketPanel()}</div>`;}
 
 function matchesPanel(){return `<div class="matches-wrap">${matchdayModePanel()}<div class="sectionhead"><h2>Group Stage Matches</h2><p>Powered by <strong style="color:var(--gold)">Migration Insights</strong>. All 72 group-stage fixtures are included here. Update status and scores during the tournament; knockout rounds can be added once the group stage is complete.</p></div><div class="matchgrid">${MATCH_PREVIEWS.map((m,i)=>matchCard(m,i)).join("")}</div></div>`;}
 
-let state=null, hasStore=(typeof window!=="undefined"&&window.storage), mem=null, currentTab="draw", busy=false;
+let state=null, hasStore=(typeof window!=="undefined"&&window.storage), mem=null, currentTab="board", busy=false;
 
 /* Offline persistence: prefer the shared artifact store when available,
    otherwise fall back to this browser's localStorage, then in-memory. */
@@ -1809,7 +1814,7 @@ function doneDrawPanel(){
   const roundLbl=champTeam?"Tournament complete":alive<=2?"The Final":alive<=4?"Semi-finals":alive<=8?"Quarter-finals":alive<=16?"Round of 16":"Round of 32";
   return `<div class="matchday-live">
     <div class="matchday-top">
-      <div><div class="matchday-title">Road to <span>the Final</span></div><div class="matchday-copy">The home screen follows the full knockout bracket, updated live as results land. Knocked-out nations drop to the graveyard below, and even once your teams are out you can keep banking bragging rights over in <strong style="color:var(--cream)">Awards</strong>.</div></div>
+      <div><div class="matchday-title">${champTeam?`The Road, <span>Completed</span>`:`Road to <span>the Final</span>`}</div><div class="matchday-copy">${champTeam?`The tournament is over &mdash; <strong style="color:var(--cream)">${esc(champTeam)}</strong> lifted the trophy. Below is the finished bracket, from the Round of 32 all the way to the final, with every knocked-out nation in the graveyard. The final table lives on <strong style="color:var(--cream)">Leaderboard</strong> and the trophy cabinet on <strong style="color:var(--cream)">Awards</strong>.`:`This page follows the full knockout bracket, updated live as results land. Knocked-out nations drop to the graveyard below, and even once your teams are out you can keep banking bragging rights over in <strong style="color:var(--cream)">Awards</strong>.`}</div></div>
       <div class="matchday-stats">${champTeam?`<span class="statpill live">&#127942; <b>${esc(champTeam)}</b> champions</span>`:`<span class="statpill live"><b>${alive}</b> still standing</span>`}<span class="statpill"><b>${elimCount}</b> eliminated</span><span class="statpill">${roundLbl}</span></div>
     </div>
     <div class="rivalry-strip"><div class="rivalry-card"><b>Road to the final:</b> single-elimination all the way to the MetLife final on 19 Jul &mdash; 30 minutes of extra time then penalties settle any deadlock.</div><div class="rivalry-card"><b>Locked draw:</b> Browser resets will not randomise the league again. The same office draw reloads every time.</div></div>
@@ -1866,7 +1871,13 @@ function boardPanel(){
     return `<div class="lbrow r${i+1} pos${r.pos}" style="animation-delay:${i*0.04}s">${posCell}<div class="lbmove">${mv}</div><div><div class="lbname">${playerLink(r.p)} ${badge}</div><div class="lbteams">${teams}</div></div><div class="lbpts">${r.pts}<small>PTS</small></div></div>`;
   }).join("");
   const legend=hasMove?`<div class="lblegend"><span class="mv up">&#9650;</span> up <span class="mv down">&#9660;</span> down <span class="mv same">&#8211;</span> no change · since last matchday · <small class="tie">T</small> = tied on points</div>`:`<div class="lblegend"><small class="tie">T</small> = tied on points · movement arrows appear once a second matchday is played</div>`;
-  return `<div id="rankingsExportTarget"><div class="sectionhead"><h2>Leaderboard</h2><p>Live standings &mdash; most points across all your nations wins the pot. Players level on points share a position. Export an offline HTML recap or CSV (works with no internet), or a PNG, JPG or PDF image.</p>${exportControl('exportRankings','Export Rankings')}</div><div class="lbtable">${rows}</div>${legend}</div>`;
+  const champTeam=Object.keys(state.scores).find(t=>(state.scores[t].stage||0)>=6);
+  const win=ranked[0];
+  const banner=champTeam?`<div class="champ-banner"><div class="champ-k">&#127942; Migration World Cup League &middot; Winner</div><div class="champ-v">${playerLink(win.p)}</div><div class="champ-s"><b>${win.pts}</b> pts &middot; <span class="flag">${flagOf(champTeam)}</span> ${esc(champTeam)} lifted the World Cup${ranked[1]?` &middot; ${esc(ranked[1].p)} runner-up on ${ranked[1].pts}`:""}</div></div>`:"";
+  const head=champTeam
+    ? `<h2>Final Standings</h2><p>The 2026 tournament is complete &mdash; these are the final totals across every nation. Export an offline HTML recap or CSV (works with no internet), or a PNG, JPG or PDF image.</p>`
+    : `<h2>Leaderboard</h2><p>Live standings &mdash; most points across all your nations wins the pot. Players level on points share a position. Export an offline HTML recap or CSV (works with no internet), or a PNG, JPG or PDF image.</p>`;
+  return `<div id="rankingsExportTarget">${banner}<div class="sectionhead">${head}${exportControl('exportRankings','Export Rankings')}</div><div class="lbtable">${rows}</div>${legend}</div>`;
 }
 function rulesPanel(){
   return `<div class="sectionhead"><h2>How It Works</h2><p>Built on the tiered-draw format, upgraded so nobody's out of it after week one.</p></div>
